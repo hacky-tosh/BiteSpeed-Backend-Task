@@ -1,10 +1,14 @@
 import express from "express";
 import bodyParser from "body-parser";
 import sequelize from "./config/db.config";
+import router from "./routes/routes";
 
 const app = express();
 
 app.use(bodyParser.json());
+
+app.use('/api', router);
+
 
 const PORT = process.env.PORT || 3000;
 
