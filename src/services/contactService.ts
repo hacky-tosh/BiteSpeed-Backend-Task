@@ -4,22 +4,12 @@ import Contact from "../models/contact";
 const identifyContact = async (payload: any) => {
   let { email, phoneNumber } = payload;
 
-  console.log(
-    "🚀🚀🚀 ~ identifyContact ~ email, phoneNumber",
-    email,
-    phoneNumber
-  );
-
   // Finding existing contacts based on email or phone number
   let existingContacts = await Contact.findAll({
     where: {
       [Op.or]: [{ email }, { phoneNumber }],
     },
   });
-  console.log(
-    "🚀🚀🚀 ~ identifyContact ~ existingContacts:",
-    JSON.parse(JSON.stringify(existingContacts))
-  );
 
   // finding the phoneNumber & email in case of empty phoneNumber or email
   let getExistingPhoneNumber: any;
@@ -41,15 +31,6 @@ const identifyContact = async (payload: any) => {
   if (existingContacts.length > 0) {
     email = email || existingContacts[1].email;
   }
-
-  console.log(
-    "🚀🚀🚀 ~ identifyContact ~ existingContacts:",
-    JSON.parse(JSON.stringify(existingContacts))
-  );
-
-  console.log("**********************************");
-  console.log(email, phoneNumber);
-  console.log("**********************************");
 
   if (existingContacts.length === 0) {
     // No existing contacts so creating a new primary contact
@@ -78,17 +59,11 @@ const identifyContact = async (payload: any) => {
   if (!primaryContact) {
     primaryContact = existingContacts[0];
   }
-  console.log(
-    "🚀🚀🚀 ~ identifyContact ~ primaryContact:",
-    JSON.parse(JSON.stringify(primaryContact))
-  );
 
   // Collecting all linked contacts
   const linkedContacts = existingContacts.filter(
     (contact) => contact.id !== primaryContact.id
   );
-
-  console.log("🚀🚀🚀 ~ identifyContact ~ linkedContacts:", linkedContacts);
 
   const existingEmail = existingContacts.some(
     (contact) => contact.email === email
@@ -97,9 +72,7 @@ const identifyContact = async (payload: any) => {
     (contact) => contact.phoneNumber === phoneNumber
   );
 
-  console.log("----------------------------------");
-  console.log(existingEmail, existingPhoneNumber);
-  console.log("----------------------------------");
+  //creating the secondary contact only when email or phoneNumber is not present
 
   if (!existingEmail || !existingPhoneNumber) {
     const newSecondaryContact = await Contact.create({
@@ -114,16 +87,18 @@ const identifyContact = async (payload: any) => {
     linkedContacts.push(newSecondaryContact);
   }
 
-  // Step 4: Consolidate contact information
+  // Collecting all emails and phone numbers
   const emails = new Set([primaryContact.email]);
   const phoneNumbers = new Set([primaryContact.phoneNumber]);
   const secondaryContactIds = linkedContacts.map((contact) => contact.id);
 
+  // Adding emails and phone numbers of linked contacts
   linkedContacts.forEach((contact) => {
     if (contact.email) emails.add(contact.email);
     if (contact.phoneNumber) phoneNumbers.add(contact.phoneNumber);
   });
 
+  // Returning the final response
   return {
     contact: {
       primaryContactId: primaryContact.id,
