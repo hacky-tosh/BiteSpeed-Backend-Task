@@ -1,88 +1,128 @@
-import Contact from "../models/contact";
 import { Op } from "sequelize";
+import Contact from "../models/contact";
 
-interface ContactPayload {
-  email?: string;
-  phoneNumber?: string;
-}
-
-export const identifyContact = async (payload: ContactPayload) => {
-  console.log("🚀🚀🚀 ~ identifyContact ~ payload:", payload);
-
+const identifyContact = async (payload: any) => {
   let { email, phoneNumber } = payload;
-  phoneNumber = phoneNumber || "";
-  email = email || "";
 
-  // finding existing contacts with email or phone number
-  const existingContacts = await Contact.findAll({
+  console.log(
+    "🚀🚀🚀 ~ identifyContact ~ email, phoneNumber",
+    email,
+    phoneNumber
+  );
+
+  // Finding existing contacts based on email or phone number
+  let existingContacts = await Contact.findAll({
+    where: {
+      [Op.or]: [{ email }, { phoneNumber }],
+    },
+  });
+  console.log(
+    "🚀🚀🚀 ~ identifyContact ~ existingContacts:",
+    JSON.parse(JSON.stringify(existingContacts))
+  );
+
+  // finding the phoneNumber & email in case of empty phoneNumber or email
+  let getExistingPhoneNumber: any;
+  if (phoneNumber === "" || phoneNumber === null) {
+    if (existingContacts.length > 0) {
+      getExistingPhoneNumber = existingContacts[0].phoneNumber;
+      phoneNumber = getExistingPhoneNumber;
+    }
+  }
+
+  // Now getting all the existing contact using PhoneNumber
+  existingContacts = await Contact.findAll({
     where: {
       [Op.or]: [{ email }, { phoneNumber }],
     },
   });
 
-  // If there is no existing contact then creating new contact and return
+  // setting the email in case of empty email
+  if (existingContacts.length > 0) {
+    email = email || existingContacts[1].email;
+  }
+
+  console.log(
+    "🚀🚀🚀 ~ identifyContact ~ existingContacts:",
+    JSON.parse(JSON.stringify(existingContacts))
+  );
+
+  console.log("**********************************");
+  console.log(email, phoneNumber);
+  console.log("**********************************");
+
   if (existingContacts.length === 0) {
-    console.log("🚀 ~ Line 20 ~  :  ");
+    // No existing contacts so creating a new primary contact
     const newContact = await Contact.create({
       email,
       phoneNumber,
       linkPrecedence: "primary",
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
     return {
-      primaryContactId: newContact.id,
-      emails: [newContact.email],
-      phoneNumbers: [newContact.phoneNumber],
-      secondaryContactIds: [],
+      contact: {
+        primaryContactId: newContact.id,
+        emails: [email],
+        phoneNumbers: [phoneNumber],
+        secondaryContactIds: [],
+      },
     };
   }
 
-  // If there is existing contact then finding primary contact
-  let primaryContact =
-    existingContacts.find((contact) => contact.linkPrecedence === "primary") ||
-    existingContacts[0];
-  primaryContact = primaryContact.toJSON();
+  let primaryContact = existingContacts.find(
+    (contact) => contact.linkPrecedence === "primary"
+  );
 
-  // finding all linked contacts spacially in case where phoneNumber is null and findign via secondry email
-  const fetchAllLinkedContacts = async (primaryContact: any) => {
-    let allContacts = [primaryContact];
-    let contactsToProcess = [primaryContact];
+  if (!primaryContact) {
+    primaryContact = existingContacts[0];
+  }
+  console.log(
+    "🚀🚀🚀 ~ identifyContact ~ primaryContact:",
+    JSON.parse(JSON.stringify(primaryContact))
+  );
 
-    while (contactsToProcess.length > 0) {
-      const currentContact = contactsToProcess.pop();
+  // Collecting all linked contacts
+  const linkedContacts = existingContacts.filter(
+    (contact) => contact.id !== primaryContact.id
+  );
 
-      const linkedContacts = await Contact.findAll({
-        where: {
-          [Op.or]: [
-            { linkedId: currentContact.id },
-            { id: currentContact.linkedId },
-          ],
-        },
-      });
+  console.log("🚀🚀🚀 ~ identifyContact ~ linkedContacts:", linkedContacts);
 
-      for (const linkedContact of linkedContacts) {
-        if (!allContacts.find((c) => c.id === linkedContact.id)) {
-          allContacts.push(linkedContact);
-          contactsToProcess.push(linkedContact);
-        }
-      }
-    }
+  const existingEmail = existingContacts.some(
+    (contact) => contact.email === email
+  );
+  const existingPhoneNumber = existingContacts.some(
+    (contact) => contact.phoneNumber === phoneNumber
+  );
 
-    return allContacts;
-  };
+  console.log("----------------------------------");
+  console.log(existingEmail, existingPhoneNumber);
+  console.log("----------------------------------");
 
-  const allContacts = await fetchAllLinkedContacts(primaryContact);
+  if (!existingEmail || !existingPhoneNumber) {
+    const newSecondaryContact = await Contact.create({
+      email,
+      phoneNumber,
+      linkedId: primaryContact.id,
+      linkPrecedence: "secondary",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-  // creating set of emails, phoneNumbers and secondaryContactIds
-  const emails = new Set();
-  const phoneNumbers = new Set();
-  const secondaryContactIds = [];
+    linkedContacts.push(newSecondaryContact);
+  }
 
-  for (const contact of allContacts) {
+  // Step 4: Consolidate contact information
+  const emails = new Set([primaryContact.email]);
+  const phoneNumbers = new Set([primaryContact.phoneNumber]);
+  const secondaryContactIds = linkedContacts.map((contact) => contact.id);
+
+  linkedContacts.forEach((contact) => {
     if (contact.email) emails.add(contact.email);
     if (contact.phoneNumber) phoneNumbers.add(contact.phoneNumber);
-    if (contact.id !== primaryContact.id) secondaryContactIds.push(contact.id);
-  }
+  });
 
   return {
     contact: {
@@ -93,3 +133,5 @@ export const identifyContact = async (payload: ContactPayload) => {
     },
   };
 };
+
+export { identifyContact };
